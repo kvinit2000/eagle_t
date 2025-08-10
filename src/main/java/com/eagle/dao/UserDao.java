@@ -290,4 +290,53 @@ public class UserDao {
             return null;
         }
     }
+    /** PATCH selected fields for the user identified by auth token. */
+    public boolean patchUserByAuthToken(String token,
+                                        String email,
+                                        LocalDate dob,
+                                        String address,
+                                        String pin,
+                                        String phone) {
+        StringBuilder sql = new StringBuilder("UPDATE users SET ");
+        java.util.List<Object> params = new java.util.ArrayList<>();
+
+        if (email != null)   { sql.append("email=?, ");   params.add(email); }
+        if (dob != null)     { sql.append("dob=?, ");     params.add(Date.valueOf(dob)); }
+        if (address != null) { sql.append("address=?, "); params.add(address); }
+        if (pin != null)     { sql.append("pin=?, ");     params.add(pin); }
+        if (phone != null)   { sql.append("phone=?, ");   params.add(phone); }
+
+        if (params.isEmpty()) {
+            log.info("patchUserByAuthToken: no fields provided");
+            return false; // nothing to update
+        }
+
+        // remove trailing comma+space
+        sql.setLength(sql.length() - 2);
+        sql.append(" WHERE auth_token = ?");
+        params.add(token);
+
+        log.debug("patchUserByAuthToken SQL={}", sql);
+
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+
+            for (int i = 0; i < params.size(); i++) {
+                Object p = params.get(i);
+                if (p instanceof Date d) {
+                    ps.setDate(i + 1, d);
+                } else {
+                    ps.setString(i + 1, (String) p);
+                }
+            }
+
+            int updated = ps.executeUpdate();
+            log.info("patchUserByAuthToken: updated={}", updated);
+            return updated > 0;
+        } catch (SQLException e) {
+            log.error("patchUserByAuthToken failed (SQLState={}, ErrorCode={}, Message={})",
+                    e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
+            return false;
+        }
+    }
 }
