@@ -1,9 +1,6 @@
 package com.eagle.http;
 
-import com.eagle.http.handlers.HelloHandler;
-import com.eagle.http.handlers.ListUsersHandler;
-import com.eagle.http.handlers.LoginHandler;
-import com.eagle.http.handlers.SignupHandler;
+import com.eagle.http.handlers.*;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -21,6 +18,7 @@ public class BasicHttpServer {
         server.createContext("/signup", new SignupHandler());
         server.createContext("/listUsers", new ListUsersHandler());
         server.createContext("/login", new LoginHandler());
+        server.createContext("/me", new GetOwnUserHandler());
 
 
         // Thread pool for handling requests

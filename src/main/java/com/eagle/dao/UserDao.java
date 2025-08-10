@@ -229,7 +229,7 @@ public class UserDao {
         }
     }
 
-    /** NEW: fetch a user profile by bearer token — use this in /me. */
+    /** NEW: fetch a user profile by bearer token — use this in /users/me. */
     public UserRecord getUserByAuthToken(String token) {
         String sql = "SELECT id, username, email, dob, address, pin, phone " +
                 "FROM users WHERE auth_token = ?";
@@ -256,6 +256,37 @@ public class UserDao {
         } catch (SQLException e) {
             log.error("getUserByAuthToken failed (SQLState={}, ErrorCode={}, Message={})",
                     e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /** NEW: fetch a user profile by username — use when you already know the username. */
+    public UserRecord getUserByUsername(String username) {
+        String sql = "SELECT id, username, email, dob, address, pin, phone " +
+                "FROM users WHERE username = ?";
+        log.debug("getUserByUsername called for username={}", username);
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    log.info("getUserByUsername: no match for username={}", username);
+                    return null;
+                }
+                UserRecord u = new UserRecord();
+                u.id = rs.getInt("id");
+                u.username = rs.getString("username");
+                u.email = rs.getString("email");
+                u.dob = rs.getDate("dob");
+                u.address = rs.getString("address");
+                u.pin = rs.getString("pin");
+                u.phone = rs.getString("phone");
+                log.info("getUserByUsername: match for userId={}, username={}", u.id, u.username);
+                return u;
+            }
+        } catch (SQLException e) {
+            log.error("getUserByUsername failed for username={} (SQLState={}, ErrorCode={}, Message={})",
+                    username, e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
             return null;
         }
     }
