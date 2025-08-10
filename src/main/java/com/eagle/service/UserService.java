@@ -31,4 +31,7 @@ public class UserService {
             throw new RuntimeException("Error hashing password", e);
         }
     }
+    public boolean validateCredentials(String username, String password){
+        return userDao.validateUser(username, password);
+    }
 }

@@ -62,4 +62,19 @@ public class UserDao {
         }
         return users;
     }
+    public boolean validateUser(String username, String password) {
+        final String sql = "SELECT COUNT(*) FROM users WHERE username=? AND password=?";
+        try (var conn = java.sql.DriverManager.getConnection(url, dbUser, dbPassword);
+             var ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            ps.setString(2, password); // TODO: switch to hashed later
+            try (var rs = ps.executeQuery()) {
+                rs.next(); return rs.getInt(1) > 0;
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("validateUser: " + e.getMessage());
+            return false;
+        }
+    }
+
 }

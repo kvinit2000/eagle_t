@@ -1,22 +1,26 @@
 package com.eagle.client;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.io.*;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
+import java.util.*;
 
 public class SignupClient {
 
-    /** Call /signup with a random username (handy for loops / MasterClient). */
+    // Public so other clients (like MasterClient) can access
+    public static final Map<String, String> USERS = new LinkedHashMap<>();
+    private static final Random RAND = new Random();
+
+    /** Generate a random username/password, signup, and store in USERS */
     public static String signupRandom() throws Exception {
-        String username = "user_" + UUID.randomUUID().toString().substring(0, 6);
-        return signup(username, "pass123");
+        String username = "user" + System.currentTimeMillis() + RAND.nextInt(1000);
+        String password = "pass" + RAND.nextInt(1000);
+
+        USERS.put(username, password); // store for reuse
+        return signup(username, password);
     }
 
-    /** Call /signup with explicit credentials. */
+    /** Actual signup request */
     public static String signup(String username, String password) throws Exception {
         URL url = new URL("http://localhost:8080/signup");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -30,19 +34,12 @@ public class SignupClient {
         }
 
         int code = conn.getResponseCode();
-        BufferedReader br = new BufferedReader(new InputStreamReader(
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
                 (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream(),
-                StandardCharsets.UTF_8
-        ));
-
-        StringBuilder sb = new StringBuilder();
-        for (String line; (line = br.readLine()) != null; ) sb.append(line);
-        br.close();
-        return sb.toString(); // raw JSON (SignupResponse)
-    }
-
-    /** Keep runnable standalone for quick manual testing. */
-    public static void main(String[] args) throws Exception {
-        System.out.println("Signup Response: " + signupRandom());
+                StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            for (String l; (l = br.readLine()) != null; ) sb.append(l);
+            return sb.toString();
+        }
     }
 }
