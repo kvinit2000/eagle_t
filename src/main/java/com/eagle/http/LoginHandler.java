@@ -1,8 +1,8 @@
 package com.eagle.http;
 
+import com.eagle.dao.UserDao;
 import com.eagle.model.request.LoginRequest;
 import com.eagle.model.response.LoginResponse;
-import com.eagle.service.UserService;
 import com.eagle.util.JwtUtil;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.*;
@@ -12,8 +12,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
 public class LoginHandler implements HttpHandler {
-    private final Gson gson = new Gson();
-    private final UserService userService = new UserService();
+    private static final Gson GSON = new Gson();
+    private final UserDao userDao = new UserDao();
 
     @Override public void handle(HttpExchange ex) {
         try {
@@ -21,15 +21,20 @@ public class LoginHandler implements HttpHandler {
                 ex.getResponseHeaders().add("Allow", "POST");
                 ex.sendResponseHeaders(405, -1); return;
             }
-            var req = gson.fromJson(new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8), LoginRequest.class);
+
+            LoginRequest req = GSON.fromJson(
+                    new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8), LoginRequest.class);
+
             if (req == null || req.getUsername()==null || req.getPassword()==null) {
                 writeJson(ex, 400, "{\"message\":\"username and password required\"}"); return;
             }
-            boolean ok = userService.validateCredentials(req.getUsername(), req.getPassword());
-            if (!ok) { writeJson(ex, 401, gson.toJson(new LoginResponse(null, 0, "Invalid credentials"))); return; }
+
+            boolean ok = userDao.validateUser(req.getUsername(), req.getPassword());
+            if (!ok) { writeJson(ex, 401, GSON.toJson(new LoginResponse(null, 0, "Invalid credentials"))); return; }
 
             String token = JwtUtil.issue(req.getUsername());
-            writeJson(ex, 200, gson.toJson(new LoginResponse(token, JwtUtil.ttlSeconds(), "Login successful")));
+            writeJson(ex, 200, GSON.toJson(new LoginResponse(token, JwtUtil.ttlSeconds(), "Login successful")));
+
         } catch (Exception e) {
             e.printStackTrace();
             try { writeJson(ex, 500, "{\"message\":\"internal error\"}"); } catch (Exception ignore) {}
@@ -37,9 +42,9 @@ public class LoginHandler implements HttpHandler {
     }
 
     private void writeJson(HttpExchange ex, int code, String body) throws Exception {
-        ex.getResponseHeaders().set("Content-Type", "application/json");
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        ex.sendResponseHeaders(code, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        ex.sendResponseHeaders(code, b.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(b); }
     }
 }

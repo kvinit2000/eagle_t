@@ -40,10 +40,10 @@ public class UserDao {
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, username);
-            stmt.setString(2, password);
+            stmt.setString(2, password); // TODO: hash later
             return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
-            System.err.println("Error saving user: " + e.getMessage());
+            // likely duplicate -> return false
             return false;
         }
     }
@@ -63,16 +63,15 @@ public class UserDao {
         return users;
     }
     public boolean validateUser(String username, String password) {
-        final String sql = "SELECT COUNT(*) FROM users WHERE username=? AND password=?";
-        try (var conn = java.sql.DriverManager.getConnection(url, dbUser, dbPassword);
-             var ps = conn.prepareStatement(sql)) {
+        String sql = "SELECT COUNT(*) FROM users WHERE username=? AND password=?";
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, username);
-            ps.setString(2, password); // TODO: switch to hashed later
-            try (var rs = ps.executeQuery()) {
+            ps.setString(2, password);
+            try (ResultSet rs = ps.executeQuery()) {
                 rs.next(); return rs.getInt(1) > 0;
             }
-        } catch (java.sql.SQLException e) {
-            System.err.println("validateUser: " + e.getMessage());
+        } catch (SQLException e) {
             return false;
         }
     }

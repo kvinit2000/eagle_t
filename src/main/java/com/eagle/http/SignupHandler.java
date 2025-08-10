@@ -1,45 +1,50 @@
 package com.eagle.http;
 
+import com.eagle.dao.UserDao;
 import com.eagle.model.request.SignupRequest;
-import com.eagle.model.response.PingResponse;
-import com.eagle.service.UserService;
-import com.google.gson.Gson;
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.eagle.model.response.SignupResponse;
+import com.google.gson.Gson;
+import com.sun.net.httpserver.*;
 
-import java.io.*;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 public class SignupHandler implements HttpHandler {
-    private static final Gson gson = new Gson();
-    private final UserService userService = new UserService();
+    private static final Gson GSON = new Gson();
+    private final UserDao userDao = new UserDao();
 
-    @Override
-    public void handle(HttpExchange exchange) throws IOException {
-        if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-            try (Reader reader = new InputStreamReader(exchange.getRequestBody())) {
-                SignupRequest signupReq = gson.fromJson(reader, SignupRequest.class);
-
-                boolean created = userService.signup(signupReq.getUsername(), signupReq.getPassword());
-                String jsonResponse = gson.toJson(
-                        new PingResponse(created ? "Signup successful" : "Signup failed", System.currentTimeMillis())
-                );
-
-                exchange.getResponseHeaders().add("Content-Type", "application/json");
-                exchange.sendResponseHeaders(created ? 200 : 400, jsonResponse.getBytes().length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(jsonResponse.getBytes());
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                String errorResponse = gson.toJson(new PingResponse("Error: " + e.getMessage(),System.currentTimeMillis()));
-                exchange.sendResponseHeaders(500, errorResponse.getBytes().length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(errorResponse.getBytes());
-                }
+    @Override public void handle(HttpExchange ex) {
+        try {
+            if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+                ex.getResponseHeaders().add("Allow", "POST");
+                ex.sendResponseHeaders(405, -1); return;
             }
-        } else {
-            exchange.sendResponseHeaders(405, -1); // Method not allowed
+
+            SignupRequest req = GSON.fromJson(
+                    new InputStreamReader(ex.getRequestBody(), StandardCharsets.UTF_8), SignupRequest.class);
+
+            if (req == null || req.getUsername()==null || req.getPassword()==null ||
+                    req.getUsername().isBlank() || req.getPassword().isBlank()) {
+                writeJson(ex, 400, "{\"message\":\"username and password required\"}"); return;
+            }
+
+            boolean ok = userDao.saveUser(req.getUsername(), req.getPassword());
+            int status = ok ? 201 : 409; // 409 if duplicate, etc.
+            SignupResponse body = new SignupResponse(ok,
+                    ok ? "Signup successful" : "User already exists", req.getUsername());
+            writeJson(ex, status, GSON.toJson(body));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            try { writeJson(ex, 500, "{\"message\":\"internal error\"}"); } catch (Exception ignore) {}
         }
+    }
+
+    private void writeJson(HttpExchange ex, int code, String body) throws Exception {
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        byte[] b = body.getBytes(StandardCharsets.UTF_8);
+        ex.sendResponseHeaders(code, b.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(b); }
     }
 }
