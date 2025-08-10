@@ -1,42 +1,34 @@
-package com.eagle.util;
+package com.eagle.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 
-import java.nio.charset.StandardCharsets;
 import java.security.Key;
-import java.time.Instant;
 import java.util.Date;
 
 public class JwtUtil {
-    private static final String SECRET = System.getenv()
-            .getOrDefault("JWT_SECRET", "change-this-secret-key-at-least-32-bytes-long!!");
+    private static final String SECRET_KEY = "replace_with_a_very_long_random_secret_key_here_1234567890";
+    private static final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    private static final long TTL_SECONDS = Long.parseLong(
-            System.getenv().getOrDefault("JWT_TTL_SECONDS", "3600")
-    );
-
-    private static final Key KEY = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
-
-    /** Issue a JWT for the given subject (e.g., username). */
-    public static String issue(String subject) {
-        Instant now = Instant.now();
-        return Jwts.builder()
-                .setSubject(subject)
-                .setIssuedAt(Date.from(now))
-                .setExpiration(Date.from(now.plusSeconds(TTL_SECONDS)))
-                .signWith(KEY, SignatureAlgorithm.HS256)
-                .compact();
+    public static Jws<Claims> parseToken(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token);
     }
 
-    /** Optional: verify & return subject. Throws if invalid/expired. */
-    public static String verify(String token) {
-        Jws<Claims> j = Jwts.parserBuilder().setSigningKey(KEY).build().parseClaimsJws(token);
-        return j.getBody().getSubject();
+    public static boolean validateToken(String token) {
+        try {
+            Jws<Claims> claims = parseToken(token);
+            Date expiration = claims.getBody().getExpiration();
+            return expiration != null && expiration.after(new Date());
+        } catch (JwtException | IllegalArgumentException e) {
+            // Signature invalid, token malformed, expired, etc.
+            return false;
+        }
     }
 
-    /** Expose configured TTL in seconds (for your LoginResponse). */
-    public static long ttlSeconds() {
-        return TTL_SECONDS;
+    public static String extractUsername(String token) {
+        return parseToken(token).getBody().getSubject();
     }
 }

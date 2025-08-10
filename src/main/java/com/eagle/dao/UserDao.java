@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.*;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,10 +21,16 @@ public class UserDao {
     }
 
     private void createTableIfNotExists() {
+        // New columns added, all nullable to stay backward compatible with your current clients.
         String sql = "CREATE TABLE users (" +
                 "id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, " +
                 "username VARCHAR(255) UNIQUE NOT NULL, " +
-                "password VARCHAR(255) NOT NULL" +
+                "password VARCHAR(255) NOT NULL, " +
+                "email VARCHAR(255), " +
+                "dob DATE, " +
+                "address VARCHAR(500), " +
+                "pin VARCHAR(20), " +
+                "phone VARCHAR(20)" +
                 ")";
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -40,9 +47,10 @@ public class UserDao {
         }
     }
 
+    /** Backward-compatible: existing signup that only has username/password. */
     public boolean saveUser(String username, String password) {
         String sql = "INSERT INTO users (username, password) VALUES (?, ?)";
-        log.debug("saveUser called for username={}", username);
+        log.debug("saveUser(username,password) called for username={}", username);
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, username);
@@ -51,9 +59,69 @@ public class UserDao {
             log.info("saveUser: inserted username={}, updated={}", username, updated);
             return updated > 0;
         } catch (SQLException e) {
-            // Common: duplicate key constraint
             log.warn("saveUser failed for username={} (SQLState={}, ErrorCode={}, Message={})",
                     username, e.getSQLState(), e.getErrorCode(), e.getMessage());
+            return false;
+        }
+    }
+
+    /** New: full-save with extended fields. Any nullable param may be null. */
+    public boolean saveUser(String username,
+                            String password,
+                            String email,
+                            LocalDate dob,
+                            String address,
+                            String pin,
+                            String phone) {
+        String sql = "INSERT INTO users (username, password, email, dob, address, pin, phone) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        log.debug("saveUser(full) called for username={}", username);
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, username);
+            stmt.setString(2, password); // TODO: hash later
+            if (email != null) stmt.setString(3, email); else stmt.setNull(3, Types.VARCHAR);
+            if (dob != null) stmt.setDate(4, Date.valueOf(dob)); else stmt.setNull(4, Types.DATE);
+            if (address != null) stmt.setString(5, address); else stmt.setNull(5, Types.VARCHAR);
+            if (pin != null) stmt.setString(6, pin); else stmt.setNull(6, Types.VARCHAR);
+            if (phone != null) stmt.setString(7, phone); else stmt.setNull(7, Types.VARCHAR);
+
+            int updated = stmt.executeUpdate();
+            log.info("saveUser(full): inserted username={}, updated={}", username, updated);
+            return updated > 0;
+        } catch (SQLException e) {
+            log.warn("saveUser(full) failed for username={} (SQLState={}, ErrorCode={}, Message={})",
+                    username, e.getSQLState(), e.getErrorCode(), e.getMessage());
+            return false;
+        }
+    }
+
+    /** Update extended fields for an existing user. */
+    public boolean updateUserDetails(String username,
+                                     String email,
+                                     LocalDate dob,
+                                     String address,
+                                     String pin,
+                                     String phone) {
+        String sql = "UPDATE users SET email=?, dob=?, address=?, pin=?, phone=? WHERE username=?";
+        log.debug("updateUserDetails called for username={}", username);
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            if (email != null) stmt.setString(1, email); else stmt.setNull(1, Types.VARCHAR);
+            if (dob != null) stmt.setDate(2, Date.valueOf(dob)); else stmt.setNull(2, Types.DATE);
+            if (address != null) stmt.setString(3, address); else stmt.setNull(3, Types.VARCHAR);
+            if (pin != null) stmt.setString(4, pin); else stmt.setNull(4, Types.VARCHAR);
+            if (phone != null) stmt.setString(5, phone); else stmt.setNull(5, Types.VARCHAR);
+            stmt.setString(6, username);
+
+            int updated = stmt.executeUpdate();
+            log.info("updateUserDetails: username={}, updated={}", username, updated);
+            return updated > 0;
+        } catch (SQLException e) {
+            log.error("updateUserDetails failed for username={} (SQLState={}, ErrorCode={}, Message={})",
+                    username, e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
             return false;
         }
     }
