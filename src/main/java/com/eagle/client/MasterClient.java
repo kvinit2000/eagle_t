@@ -7,10 +7,13 @@ import java.util.Random;
 
 public class MasterClient {
     private static final Random RAND = new Random();
+    private static long ITER = 0; // loop counter
 
     public static void main(String[] args) {
         while (true) {
             try {
+                ITER++;
+
                 // 1) Ping
                 System.out.println("PING: " + PingClient.ping());
 
@@ -40,8 +43,33 @@ public class MasterClient {
                         System.out.println("ME (last after patch): email=" + after.getEmail()
                                 + ", address=" + after.getAddress());
 
+                        // 2c) ACCOUNTS FLOW for the last user
+                        // Create account (server will generate number)
+                        String created = AccountsClient.create(SignupClient.LAST_AUTH_TOKEN, null);
+                        System.out.println("ACCOUNT CREATE: " + created);
+
+                        // List accounts
+                        String listed = AccountsClient.list(SignupClient.LAST_AUTH_TOKEN);
+                        System.out.println("ACCOUNT LIST: " + listed);
+
+                        // Occasionally delete (every 5th loop) so lists can grow otherwise
+                        if (ITER % 5 == 0) {
+                            Integer firstId = AccountsClient.firstIdFromList(listed);
+                            if (firstId != null) {
+                                String one = AccountsClient.getOne(SignupClient.LAST_AUTH_TOKEN, firstId);
+                                System.out.println("ACCOUNT GET " + firstId + ": " + one);
+
+                                String del = AccountsClient.delete(SignupClient.LAST_AUTH_TOKEN, firstId);
+                                System.out.println("ACCOUNT DELETE " + firstId + ": " + del);
+                            } else {
+                                System.out.println("No accounts to DELETE for last user on this cycle.");
+                            }
+                        } else {
+                            System.out.println("Skipping delete this cycle (ITER=" + ITER + ").");
+                        }
+
                     } catch (Exception ex) {
-                        System.err.println("[MasterClient] /users/me GET or PATCH (last) failed: " + ex.getMessage());
+                        System.err.println("[MasterClient] GET/PATCH/ACCOUNTS (last) failed: " + ex.getMessage());
                     }
                 } else {
                     System.out.println("ME (last): token not available");
@@ -51,7 +79,6 @@ public class MasterClient {
                 for (Map.Entry<String, String> entry : SignupClient.USERS.entrySet()) {
                     String loginResponse = LoginClient.login(entry.getKey(), entry.getValue());
                     System.out.println("LOGIN (" + entry.getKey() + "): " + loginResponse);
-                    // If LoginClient later returns tokens, parse & store them into SignupClient.TOKENS here.
                 }
 
                 // 3a) GET + PATCH /users/me for all users we have tokens for (from signup captures)
@@ -75,6 +102,14 @@ public class MasterClient {
                                 newPhone
                         );
                         System.out.println("ME (" + username + " after patch): phone=" + after.getPhone());
+
+                        // Accounts: create and list for each (do not delete here so lists can grow)
+                        String created = AccountsClient.create(token, null);
+                        System.out.println("ACCOUNT CREATE (" + username + "): " + created);
+
+                        String listed = AccountsClient.list(token);
+                        System.out.println("ACCOUNT LIST (" + username + "): " + listed);
+
                     } catch (Exception ex) {
                         System.err.println("[MasterClient] /users/me GET or PATCH failed for " + username + ": " + ex.getMessage());
                     }
@@ -84,7 +119,7 @@ public class MasterClient {
                 System.out.println("LIST USERS: " + ListUsersClient.listUsers());
 
                 System.out.println("--------------------------------------------------");
-                Thread.sleep(5000);
+                Thread.sleep(10000);
             } catch (Exception e) {
                 System.err.println("[MasterClient] error: " + e.getMessage());
                 try { Thread.sleep(3000); } catch (InterruptedException ignored) {}

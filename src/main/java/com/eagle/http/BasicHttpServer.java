@@ -19,6 +19,7 @@ public class BasicHttpServer {
         server.createContext("/listUsers", new ListUsersHandler());
         server.createContext("/login", new LoginHandler());
         server.createContext("/users/me", new UsersMeHandler());
+        server.createContext("/users/me/accounts", new UsersMeAccountsHandler()); // create/list/get/delete
 
 
         // Thread pool for handling requests
