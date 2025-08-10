@@ -5,9 +5,9 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-public class PingClient {
-    public static String ping() throws Exception {
-        URL url = new URL("http://localhost:8080/hello");
+public class ListUsersClient {
+    public static String listUsers() throws Exception {
+        URL url = new URL("http://localhost:8080/listUsers");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
         return readResponse(conn);

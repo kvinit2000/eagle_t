@@ -18,6 +18,10 @@ public class BasicHttpServer {
 
         // Create a context for the "/hello" path
         server.createContext("/hello", new HelloHandler());
+        // Create a context for the "/signup" path
+        server.createContext("/signup", new SignupHandler());
+        server.createContext("/listUsers", new ListUsersHandler());
+
 
         // Thread pool for handling requests
         server.setExecutor(Executors.newFixedThreadPool(10));
