@@ -52,24 +52,38 @@ public class MasterClient {
                         String listed = AccountsClient.list(SignupClient.LAST_AUTH_TOKEN);
                         System.out.println("ACCOUNT LIST: " + listed);
 
-                        // Occasionally delete (every 5th loop) so lists can grow otherwise
-                        if (ITER % 5 == 0) {
-                            Integer firstId = AccountsClient.firstIdFromList(listed);
-                            if (firstId != null) {
+                        // Take the first account id from the list (helper parses JSON)
+                        Integer firstId = AccountsClient.firstIdFromList(listed);
+                        if (firstId != null) {
+                            // Transactions demo on that account
+                            String depAmt = String.format("%d.00", 10 + RAND.nextInt(91));    // 10..100
+                            String withAmt = String.format("%d.00", 1 + RAND.nextInt(9));    // 1..9
+
+                            String dep = AccountsClient.deposit(SignupClient.LAST_AUTH_TOKEN, firstId, depAmt);
+                            System.out.println("TX DEPOSIT (" + depAmt + ") -> " + dep);
+
+                            String wdr = AccountsClient.withdraw(SignupClient.LAST_AUTH_TOKEN, firstId, withAmt);
+                            System.out.println("TX WITHDRAW (" + withAmt + ") -> " + wdr);
+
+                            String txList = AccountsClient.listTransactions(SignupClient.LAST_AUTH_TOKEN, firstId);
+                            System.out.println("TX LIST -> " + txList);
+
+                            // Occasionally delete (every 7th cycle) so lists mostly grow
+                            if (ITER % 7 == 0) {
                                 String one = AccountsClient.getOne(SignupClient.LAST_AUTH_TOKEN, firstId);
                                 System.out.println("ACCOUNT GET " + firstId + ": " + one);
 
                                 String del = AccountsClient.delete(SignupClient.LAST_AUTH_TOKEN, firstId);
                                 System.out.println("ACCOUNT DELETE " + firstId + ": " + del);
                             } else {
-                                System.out.println("No accounts to DELETE for last user on this cycle.");
+                                System.out.println("Skipping delete this cycle (ITER=" + ITER + ").");
                             }
                         } else {
-                            System.out.println("Skipping delete this cycle (ITER=" + ITER + ").");
+                            System.out.println("No accounts found to transact on this cycle.");
                         }
 
                     } catch (Exception ex) {
-                        System.err.println("[MasterClient] GET/PATCH/ACCOUNTS (last) failed: " + ex.getMessage());
+                        System.err.println("[MasterClient] GET/PATCH/ACCOUNTS/TX (last) failed: " + ex.getMessage());
                     }
                 } else {
                     System.out.println("ME (last): token not available");
@@ -79,6 +93,7 @@ public class MasterClient {
                 for (Map.Entry<String, String> entry : SignupClient.USERS.entrySet()) {
                     String loginResponse = LoginClient.login(entry.getKey(), entry.getValue());
                     System.out.println("LOGIN (" + entry.getKey() + "): " + loginResponse);
+                    // If LoginClient later returns tokens, parse & store them into SignupClient.TOKENS here.
                 }
 
                 // 3a) GET + PATCH /users/me for all users we have tokens for (from signup captures)
@@ -103,15 +118,26 @@ public class MasterClient {
                         );
                         System.out.println("ME (" + username + " after patch): phone=" + after.getPhone());
 
-                        // Accounts: create and list for each (do not delete here so lists can grow)
+                        // Accounts: create and list for each (no delete here so lists can grow)
                         String created = AccountsClient.create(token, null);
                         System.out.println("ACCOUNT CREATE (" + username + "): " + created);
 
                         String listed = AccountsClient.list(token);
                         System.out.println("ACCOUNT LIST (" + username + "): " + listed);
 
+                        // Optional: run a tiny transaction on first account if present
+                        Integer firstId = AccountsClient.firstIdFromList(listed);
+                        if (firstId != null) {
+                            String depAmt = "15.00";
+                            String dep = AccountsClient.deposit(token, firstId, depAmt);
+                            System.out.println("TX DEPOSIT (" + username + ", " + depAmt + "): " + dep);
+
+                            String txList = AccountsClient.listTransactions(token, firstId);
+                            System.out.println("TX LIST (" + username + "): " + txList);
+                        }
+
                     } catch (Exception ex) {
-                        System.err.println("[MasterClient] /users/me GET or PATCH failed for " + username + ": " + ex.getMessage());
+                        System.err.println("[MasterClient] /users/me flow failed for " + username + ": " + ex.getMessage());
                     }
                 }
 
