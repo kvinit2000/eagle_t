@@ -1,5 +1,6 @@
 package com.eagle.http;
 
+import com.eagle.model.response.PingResponse;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;

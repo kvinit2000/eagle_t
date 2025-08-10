@@ -1,5 +1,7 @@
 package com.eagle.http;
 
+import com.eagle.model.request.SignupRequest;
+import com.eagle.model.response.PingResponse;
 import com.eagle.service.UserService;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;

@@ -1,4 +1,4 @@
-package com.eagle.http;
+package com.eagle.model.response;
 
 public class PingResponse {
     private String message;

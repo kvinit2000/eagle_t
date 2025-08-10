@@ -1,4 +1,4 @@
-package com.eagle.http;
+package com.eagle.model.request;
 
 public class SignupRequest {
     private String username;
