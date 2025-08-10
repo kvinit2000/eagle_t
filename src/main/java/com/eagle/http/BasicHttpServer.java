@@ -18,7 +18,7 @@ public class BasicHttpServer {
         server.createContext("/signup", new SignupHandler());
         server.createContext("/listUsers", new ListUsersHandler());
         server.createContext("/login", new LoginHandler());
-        server.createContext("/me", new GetOwnUserHandler());
+        server.createContext("/users/me", new GetOwnUserHandler());
 
 
         // Thread pool for handling requests
