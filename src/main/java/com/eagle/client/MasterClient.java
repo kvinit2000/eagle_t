@@ -1,20 +1,25 @@
 package com.eagle.client;
 
 public class MasterClient {
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
         while (true) {
-            // 1. Ping
-            System.out.println("PING: " + PingClient.ping());
+            try {
+                // 1) Ping
+                System.out.println("PING: " + PingClient.ping());
 
-            // 2. Signup
-            String signupResponse = SignupClient.signupRandom();
-            System.out.println("SIGNUP RESPONSE: " + signupResponse);
+                // 2) Signup (random user each cycle)
+                String signupResponse = SignupClient.signupRandom();
+                System.out.println("SIGNUP RESPONSE: " + signupResponse);
 
-            // 3. List users
-            System.out.println("LIST USERS: " + ListUsersClient.listUsers());
+                // 3) List users
+                System.out.println("LIST USERS: " + ListUsersClient.listUsers());
 
-            System.out.println("--------------------------------------------------");
-            Thread.sleep(5000);
+                System.out.println("--------------------------------------------------");
+                Thread.sleep(5000);
+            } catch (Exception e) {
+                System.err.println("MasterClient error: " + e.getMessage());
+                try { Thread.sleep(3000); } catch (InterruptedException ignored) {}
+            }
         }
     }
 }

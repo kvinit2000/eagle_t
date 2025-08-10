@@ -4,6 +4,7 @@ import com.eagle.dao.UserDao;
 import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import com.eagle.model.response.UserListResponse;
 
 import java.io.IOException;
 import java.io.OutputStream;

@@ -4,23 +4,34 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
 public class ListUsersClient {
+
+    /** Call /listUsers on the server; optional Bearer token. */
     public static String listUsers() throws Exception {
-        URL url = new URL("http://localhost:8080/listUsers");
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setRequestMethod("GET");
-        return readResponse(conn);
+        return listUsers("http://localhost:8080", null);
     }
 
-    private static String readResponse(HttpURLConnection conn) throws Exception {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()))) {
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = in.readLine()) != null) {
-                response.append(line);
-            }
-            return response.toString();
+    public static String listUsers(String baseUrl, String bearerToken) throws Exception {
+        URL url = new URL(baseUrl + "/listUsers");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
         }
+
+        int code = conn.getResponseCode();
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream(),
+                StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            for (String line; (line = br.readLine()) != null; ) sb.append(line);
+            return sb.toString(); // JSON (UserListResponse)
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        System.out.println("User List Response: " + listUsers());
     }
 }
