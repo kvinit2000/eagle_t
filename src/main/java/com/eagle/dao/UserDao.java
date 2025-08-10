@@ -11,7 +11,7 @@ import java.util.List;
 public class UserDao {
     private static final Logger log = LogManager.getLogger(UserDao.class);
 
-    private final String url = "jdbc:derby:eagleDB;create=true"; // embedded Derby DB
+    private final String url = "jdbc:derby:memory:eagleDB;create=true";
     private final String dbUser = "";
     private final String dbPassword = "";
 

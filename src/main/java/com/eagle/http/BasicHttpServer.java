@@ -1,13 +1,12 @@
 package com.eagle.http;
 
-import com.eagle.model.response.PingResponse;
-import com.google.gson.Gson;
+import com.eagle.http.handlers.HelloHandler;
+import com.eagle.http.handlers.ListUsersHandler;
+import com.eagle.http.handlers.LoginHandler;
+import com.eagle.http.handlers.SignupHandler;
 import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.HttpHandler;
-import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.*;
 
 public class SignupClient {
@@ -17,23 +18,29 @@ public class SignupClient {
     public static volatile String LAST_USERNAME = null;
     public static volatile String LAST_PASSWORD = null;
 
-    /** Generate a random username/password, signup, and store exact server username in USERS */
+    /** Generate random details, signup, and store exact server username in USERS */
     public static String signupRandom() throws Exception {
         String username = "user" + System.currentTimeMillis() + RAND.nextInt(1000);
         String password = "pass" + RAND.nextInt(1000);
-        return signupAndStore(username, password);
+        String email = username + "@example.com";
+        String dob = LocalDate.of(1990 + RAND.nextInt(20), 1 + RAND.nextInt(12), 1 + RAND.nextInt(28)).toString();
+        String address = "123 Main Street";
+        String pin = String.format("%06d", RAND.nextInt(999999));
+        String phone = "+44" + (100000000 + RAND.nextInt(899999999));
+        return signupAndStore(username, password, email, dob, address, pin, phone);
     }
 
     /** Call /signup with explicit creds and store EXACT username the server returns */
-    public static String signupAndStore(String username, String password) throws Exception {
-        String respJson = signup(username, password);
+    public static String signupAndStore(String username, String password,
+                                        String email, String dob, String address,
+                                        String pin, String phone) throws Exception {
+        String respJson = signup(username, password, email, dob, address, pin, phone);
 
         // Try to read {"username": "..."} from server response
         try {
             Map<?,?> map = GSON.fromJson(respJson, Map.class);
             Object serverUsername = (map != null) ? map.get("username") : null;
             if (serverUsername instanceof String su && !su.isBlank()) {
-                // In case server changed the username, reflect that in our map
                 USERS.remove(username);
                 USERS.put(su, password);
                 LAST_USERNAME = su;
@@ -41,24 +48,40 @@ public class SignupClient {
                 return respJson;
             }
         } catch (Exception ignore) {
-            // If parsing fails, fall back to client-generated
+            // fallback if parsing fails
         }
-        // If server didn't return username, assume it saved what we sent
+
         USERS.put(username, password);
         LAST_USERNAME = username;
         LAST_PASSWORD = password;
         return respJson;
     }
 
-    /** Raw HTTP call to /signup (no storage) */
-    public static String signup(String username, String password) throws Exception {
+    /** Overload for old 2-field version (still works if server ignores missing fields) */
+    public static String signupAndStore(String username, String password) throws Exception {
+        return signupAndStore(username, password, null, null, null, null, null);
+    }
+
+    /** Raw HTTP call to /signup with all fields */
+    public static String signup(String username, String password,
+                                String email, String dob, String address,
+                                String pin, String phone) throws Exception {
         URL url = new URL("http://localhost:8080/signup");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 
-        String jsonBody = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}";
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("username", username);
+        body.put("password", password);
+        if (email != null) body.put("email", email);
+        if (dob != null) body.put("dob", dob);
+        if (address != null) body.put("address", address);
+        if (pin != null) body.put("pin", pin);
+        if (phone != null) body.put("phone", phone);
+
+        String jsonBody = GSON.toJson(body);
         try (OutputStream os = conn.getOutputStream()) {
             os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
         }
