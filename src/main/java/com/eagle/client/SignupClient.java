@@ -9,16 +9,21 @@ import java.util.*;
 
 public class SignupClient {
 
-    // Public so MasterClient can use all accumulated creds
+    // username -> password (kept for backwards-compat)
     public static final Map<String, String> USERS = new LinkedHashMap<>();
+
+    // NEW: username -> bearer token (auth_token from server)
+    public static final Map<String, String> TOKENS = new LinkedHashMap<>();
+
     private static final Random RAND = new Random();
     private static final Gson GSON = new Gson();
 
     // Keep track of last created (handy for quick login)
     public static volatile String LAST_USERNAME = null;
     public static volatile String LAST_PASSWORD = null;
+    public static volatile String LAST_AUTH_TOKEN = null; // NEW
 
-    /** Generate random details, signup, and store exact server username in USERS */
+    /** Generate random details, signup, and store exact server username in USERS/TOKENS */
     public static String signupRandom() throws Exception {
         String username = "user" + System.currentTimeMillis() + RAND.nextInt(1000);
         String password = "pass" + RAND.nextInt(1000);
@@ -36,24 +41,38 @@ public class SignupClient {
                                         String pin, String phone) throws Exception {
         String respJson = signup(username, password, email, dob, address, pin, phone);
 
-        // Try to read {"username": "..."} from server response
         try {
-            Map<?,?> map = GSON.fromJson(respJson, Map.class);
-            Object serverUsername = (map != null) ? map.get("username") : null;
-            if (serverUsername instanceof String su && !su.isBlank()) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = GSON.fromJson(respJson, Map.class);
+
+            // Read fields from server response
+            String serverUsername = asString(map.get("username"));
+            String authToken = asString(map.get("authToken")); // <-- from updated SignupResponse
+
+            if (serverUsername != null && !serverUsername.isBlank()) {
+                // keep USERS map in sync
                 USERS.remove(username);
-                USERS.put(su, password);
-                LAST_USERNAME = su;
+                USERS.put(serverUsername, password);
+
+                // NEW: store token if present
+                if (authToken != null && !authToken.isBlank()) {
+                    TOKENS.put(serverUsername, authToken);
+                    LAST_AUTH_TOKEN = authToken;
+                }
+
+                LAST_USERNAME = serverUsername;
                 LAST_PASSWORD = password;
                 return respJson;
             }
         } catch (Exception ignore) {
-            // fallback if parsing fails
+            // fall through to legacy behavior
         }
 
+        // Legacy fallback if parsing fails
         USERS.put(username, password);
         LAST_USERNAME = username;
         LAST_PASSWORD = password;
+        // token likely missing in this path
         return respJson;
     }
 
@@ -94,5 +113,19 @@ public class SignupClient {
             for (String l; (l = br.readLine()) != null; ) sb.append(l);
             return sb.toString();
         }
+    }
+
+    // --- Helpers ---
+
+    private static String asString(Object o) {
+        if (o == null) return null;
+        if (o instanceof String s) return s;
+        return String.valueOf(o);
+    }
+
+    /** Build Authorization header value for a given username (null if missing). */
+    public static String bearerFor(String username) {
+        String tok = TOKENS.get(username);
+        return (tok == null || tok.isBlank()) ? null : "Bearer " + tok;
     }
 }

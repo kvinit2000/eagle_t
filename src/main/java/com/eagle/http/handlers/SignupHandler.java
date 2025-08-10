@@ -36,7 +36,8 @@ public class SignupHandler implements HttpHandler {
                 sendJson(exchange, 400, new SignupResponse(
                         false,
                         "username and password are required",
-                        null, null, null, null, null, null
+                        null, null, null, null, null, null,
+                        null // authToken
                 ));
                 return;
             }
@@ -61,8 +62,13 @@ public class SignupHandler implements HttpHandler {
                     nullIfBlank(req.getPhone())
             );
 
+            String dobOut = req.getDob();
+
             if (ok) {
-                String dobOut = req.getDob();
+                // Fetch the bearer token generated during save
+                String authToken = userDao.getAuthToken(req.getUsername());
+
+                // Return token in JSON (OpenAPI Bearer flow)
                 sendJson(exchange, 201, new SignupResponse(
                         true,
                         "Signup successful",
@@ -71,10 +77,10 @@ public class SignupHandler implements HttpHandler {
                         dobOut,
                         nullIfBlank(req.getAddress()),
                         nullIfBlank(req.getPin()),
-                        nullIfBlank(req.getPhone())
+                        nullIfBlank(req.getPhone()),
+                        authToken
                 ));
             } else {
-                String dobOut = req.getDob();
                 sendJson(exchange, 409, new SignupResponse(
                         false,
                         "Username already exists or could not be saved",
@@ -83,7 +89,8 @@ public class SignupHandler implements HttpHandler {
                         dobOut,
                         nullIfBlank(req.getAddress()),
                         nullIfBlank(req.getPin()),
-                        nullIfBlank(req.getPhone())
+                        nullIfBlank(req.getPhone()),
+                        null // no token on failure
                 ));
             }
 
@@ -93,7 +100,8 @@ public class SignupHandler implements HttpHandler {
                 sendJson(exchange, 500, new SignupResponse(
                         false,
                         "Internal error",
-                        null, null, null, null, null, null
+                        null, null, null, null, null, null,
+                        null
                 ));
             } catch (Exception ignored) {}
         }

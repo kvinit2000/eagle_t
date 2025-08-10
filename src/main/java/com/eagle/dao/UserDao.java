@@ -7,6 +7,7 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class UserDao {
     private static final Logger log = LogManager.getLogger(UserDao.class);
@@ -20,8 +21,18 @@ public class UserDao {
         createTableIfNotExists();
     }
 
+    // Lightweight DTO for safe returns (no password, no token)
+    public static class UserRecord {
+        public int id;
+        public String username;
+        public String email;
+        public Date dob;
+        public String address;
+        public String pin;
+        public String phone;
+    }
+
     private void createTableIfNotExists() {
-        // New columns added, all nullable to stay backward compatible with your current clients.
         String sql = "CREATE TABLE users (" +
                 "id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, " +
                 "username VARCHAR(255) UNIQUE NOT NULL, " +
@@ -30,7 +41,8 @@ public class UserDao {
                 "dob DATE, " +
                 "address VARCHAR(500), " +
                 "pin VARCHAR(20), " +
-                "phone VARCHAR(20)" +
+                "phone VARCHAR(20), " +
+                "auth_token VARCHAR(64) UNIQUE" +
                 ")";
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -47,14 +59,22 @@ public class UserDao {
         }
     }
 
-    /** Backward-compatible: existing signup that only has username/password. */
+    /** Generate a new opaque bearer token (no dashes). */
+    private String newToken() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    /** Backward-compatible: existing signup that only has username/password.
+     *  Now also stores a generated auth_token so /me can work. */
     public boolean saveUser(String username, String password) {
-        String sql = "INSERT INTO users (username, password) VALUES (?, ?)";
+        String token = newToken();
+        String sql = "INSERT INTO users (username, password, auth_token) VALUES (?, ?, ?)";
         log.debug("saveUser(username,password) called for username={}", username);
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setString(1, username);
             stmt.setString(2, password); // TODO: hash later
+            stmt.setString(3, token);
             int updated = stmt.executeUpdate();
             log.info("saveUser: inserted username={}, updated={}", username, updated);
             return updated > 0;
@@ -65,7 +85,8 @@ public class UserDao {
         }
     }
 
-    /** New: full-save with extended fields. Any nullable param may be null. */
+    /** New: full-save with extended fields. Any nullable param may be null.
+     *  Also stores a generated auth_token. */
     public boolean saveUser(String username,
                             String password,
                             String email,
@@ -73,8 +94,9 @@ public class UserDao {
                             String address,
                             String pin,
                             String phone) {
-        String sql = "INSERT INTO users (username, password, email, dob, address, pin, phone) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String token = newToken();
+        String sql = "INSERT INTO users (username, password, email, dob, address, pin, phone, auth_token) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         log.debug("saveUser(full) called for username={}", username);
         try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -86,6 +108,7 @@ public class UserDao {
             if (address != null) stmt.setString(5, address); else stmt.setNull(5, Types.VARCHAR);
             if (pin != null) stmt.setString(6, pin); else stmt.setNull(6, Types.VARCHAR);
             if (phone != null) stmt.setString(7, phone); else stmt.setNull(7, Types.VARCHAR);
+            stmt.setString(8, token);
 
             int updated = stmt.executeUpdate();
             log.info("saveUser(full): inserted username={}, updated={}", username, updated);
@@ -126,6 +149,7 @@ public class UserDao {
         }
     }
 
+    /** List all usernames (unchanged). */
     public List<String> getAllUsers() {
         String sql = "SELECT username FROM users";
         log.debug("getAllUsers called");
@@ -144,6 +168,7 @@ public class UserDao {
         return users;
     }
 
+    /** Basic credential check (unchanged). */
     public boolean validateUser(String username, String password) {
         String sql = "SELECT COUNT(*) FROM users WHERE username=? AND password=?";
         log.debug("validateUser called for username={}", username);
@@ -162,6 +187,76 @@ public class UserDao {
             log.error("validateUser failed for username={} (SQLState={}, ErrorCode={}, Message={})",
                     username, e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
             return false;
+        }
+    }
+
+    /** NEW: fetch the bearer token for a username (for returning after signup/login). */
+    public String getAuthToken(String username) {
+        String sql = "SELECT auth_token FROM users WHERE username=?";
+        log.debug("getAuthToken called for username={}", username);
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                String token = rs.getString(1);
+                log.info("getAuthToken: username={} -> tokenFound={}", username, token != null);
+                return token;
+            }
+        } catch (SQLException e) {
+            log.error("getAuthToken failed for username={} (SQLState={}, ErrorCode={}, Message={})",
+                    username, e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /** NEW: set/rotate a token for a username (useful if you add a /login later). */
+    public String rotateAuthToken(String username) {
+        String token = newToken();
+        String sql = "UPDATE users SET auth_token=? WHERE username=?";
+        log.debug("rotateAuthToken called for username={}", username);
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, token);
+            ps.setString(2, username);
+            int updated = ps.executeUpdate();
+            log.info("rotateAuthToken: username={}, updated={}", username, updated);
+            return updated > 0 ? token : null;
+        } catch (SQLException e) {
+            log.error("rotateAuthToken failed for username={} (SQLState={}, ErrorCode={}, Message={})",
+                    username, e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /** NEW: fetch a user profile by bearer token — use this in /me. */
+    public UserRecord getUserByAuthToken(String token) {
+        String sql = "SELECT id, username, email, dob, address, pin, phone " +
+                "FROM users WHERE auth_token = ?";
+        log.debug("getUserByAuthToken called");
+        try (Connection conn = DriverManager.getConnection(url, dbUser, dbPassword);
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, token);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    log.info("getUserByAuthToken: no match");
+                    return null;
+                }
+                UserRecord u = new UserRecord();
+                u.id = rs.getInt("id");
+                u.username = rs.getString("username");
+                u.email = rs.getString("email");
+                u.dob = rs.getDate("dob");
+                u.address = rs.getString("address");
+                u.pin = rs.getString("pin");
+                u.phone = rs.getString("phone");
+                log.info("getUserByAuthToken: match for userId={}, username={}", u.id, u.username);
+                return u;
+            }
+        } catch (SQLException e) {
+            log.error("getUserByAuthToken failed (SQLState={}, ErrorCode={}, Message={})",
+                    e.getSQLState(), e.getErrorCode(), e.getMessage(), e);
+            return null;
         }
     }
 }
