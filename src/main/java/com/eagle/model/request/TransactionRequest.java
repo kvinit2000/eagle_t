@@ -1,5 +1,7 @@
 package com.eagle.model.request;
 
+import com.eagle.util.Jsons;
+
 public class TransactionRequest {
 
     private String amount;  // Keep as String so we can trim and validate later
@@ -38,4 +40,6 @@ public class TransactionRequest {
     public void setDescription(String description) {
         this.description = description;
     }
+    public String toJson() { return Jsons.toJson(this); }
+    public static TransactionRequest fromJson(String json) { return Jsons.fromJson(json, TransactionRequest.class); }
 }

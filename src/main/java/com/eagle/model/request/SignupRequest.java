@@ -1,5 +1,6 @@
 package com.eagle.model.request;
 
+import com.eagle.util.Jsons;
 import com.google.gson.Gson;
 
 public class SignupRequest {
@@ -28,15 +29,6 @@ public class SignupRequest {
         this.phone = phone;
     }
 
-    // ---- JSON helpers ----
-    public String toJson() {
-        return GSON.toJson(this);
-    }
-
-    public static SignupRequest fromJson(String json) {
-        return GSON.fromJson(json, SignupRequest.class);
-    }
-
     // ---- Getters & setters ----
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
@@ -58,4 +50,6 @@ public class SignupRequest {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static SignupRequest fromJson(String json) { return Jsons.fromJson(json, SignupRequest.class); }
 }

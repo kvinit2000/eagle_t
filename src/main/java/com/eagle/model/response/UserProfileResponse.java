@@ -1,5 +1,7 @@
 package com.eagle.model.response;
 
+import com.eagle.util.Jsons;
+
 public class UserProfileResponse {
     private final String username;
     private final String email;
@@ -23,4 +25,6 @@ public class UserProfileResponse {
     public String getAddress() { return address; }
     public String getPin() { return pin; }
     public String getPhone() { return phone; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static UserProfileResponse fromJson(String json) { return Jsons.fromJson(json, UserProfileResponse.class); }
 }

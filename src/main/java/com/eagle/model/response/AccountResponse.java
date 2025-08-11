@@ -1,5 +1,7 @@
 package com.eagle.model.response;
 
+import com.eagle.util.Jsons;
+
 public class AccountResponse {
     private final int id;
     private final String accountNumber;
@@ -14,4 +16,6 @@ public class AccountResponse {
     public int getId() { return id; }
     public String getAccountNumber() { return accountNumber; }
     public String getBalance() { return balance; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static AccountResponse fromJson(String json) { return Jsons.fromJson(json, AccountResponse.class); }
 }

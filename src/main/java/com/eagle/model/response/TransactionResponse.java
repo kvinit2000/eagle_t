@@ -1,5 +1,7 @@
 package com.eagle.model.response;
 
+import com.eagle.util.Jsons;
+
 public class TransactionResponse {
     private final int id;
     private final String type;
@@ -20,4 +22,6 @@ public class TransactionResponse {
     public String getAmount() { return amount; }
     public String getBalanceAfter() { return balanceAfter; }
     public String getCreatedAt() { return createdAt; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static TransactionResponse fromJson(String json) { return Jsons.fromJson(json, TransactionResponse.class); }
 }

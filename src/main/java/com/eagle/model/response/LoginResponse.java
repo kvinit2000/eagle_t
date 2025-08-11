@@ -1,5 +1,7 @@
 package com.eagle.model.response;
 
+import com.eagle.util.Jsons;
+
 public class LoginResponse {
     private final String token;
     private final long expiresInSeconds;
@@ -11,4 +13,6 @@ public class LoginResponse {
     public String getToken(){ return token; }
     public long getExpiresInSeconds(){ return expiresInSeconds; }
     public String getMessage(){ return message; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static LoginResponse fromJson(String json) { return Jsons.fromJson(json, LoginResponse.class); }
 }

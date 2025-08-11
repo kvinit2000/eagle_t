@@ -1,4 +1,5 @@
 package com.eagle.model.response;
+import com.eagle.util.Jsons;
 
 public class SignupResponse {
     private final boolean success;
@@ -34,4 +35,7 @@ public class SignupResponse {
     public String getPin() { return pin; }
     public String getPhone() { return phone; }
     public String getAuthToken() { return authToken; } // Getter for new field
+    public String toJson() { return Jsons.toJson(this); }
+    public static SignupResponse fromJson(String json) { return Jsons.fromJson(json, SignupResponse.class); }
+
 }

@@ -1,5 +1,7 @@
 package com.eagle.model.response;
 
+import com.eagle.util.Jsons;
+
 import java.util.List;
 
 public class UserListResponse {
@@ -13,4 +15,6 @@ public class UserListResponse {
 
     public String getMessage() { return message; }
     public List<String> getUsers() { return users; }
+    public String toJson() { return Jsons.toJson(this); }
+    public static UserListResponse fromJson(String json) { return Jsons.fromJson(json, UserListResponse.class); }
 }
