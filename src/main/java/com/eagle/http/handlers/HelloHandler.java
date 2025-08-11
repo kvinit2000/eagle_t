@@ -2,30 +2,28 @@ package com.eagle.http.handlers;
 
 import com.eagle.model.response.ErrorResponse;
 import com.eagle.model.response.PingResponse;
-import com.eagle.util.HttpIO;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 
-public class HelloHandler implements HttpHandler {
+/**
+ * Refactored to use BaseHandler utilities.
+ */
+public class HelloHandler extends BaseHandler {
 
     @Override
-    public void handle(HttpExchange ex) {
+    protected void doHandle(HttpExchange ex) throws Exception {
+        if (!ensureMethod(ex, "GET", "OPTIONS")) return; // writes 405 + Allow on mismatch
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.getResponseHeaders().set("Allow", "GET, OPTIONS");
+            ex.sendResponseHeaders(204, -1);
+            return;
+        }
+
         try {
-            if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
-                HttpIO.writeJson(ex, 405, new ErrorResponse("method_not_allowed", "Use GET").toJson());
-                return;
-            }
-
             PingResponse resp = new PingResponse("Hello from server", System.currentTimeMillis());
-            HttpIO.writeJson(ex, 200, resp.toJson());
-
+            writeJson(ex, 200, resp);
         } catch (Exception e) {
-            // Best-effort error write; fall back to status-only if stream is broken
-            try {
-                HttpIO.writeJson(ex, 500, new ErrorResponse("internal_error", e.getMessage()).toJson());
-            } catch (Exception ignore) {
-                try { ex.sendResponseHeaders(500, -1); } catch (Exception ignored) {}
-            }
+            // Return JSON error body; BaseHandler has a 500 safety net as well
+            writeJson(ex, 500, new ErrorResponse("internal_error", e.getMessage()));
         }
     }
 }

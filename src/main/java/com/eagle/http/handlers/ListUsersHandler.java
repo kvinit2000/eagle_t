@@ -3,33 +3,29 @@ package com.eagle.http.handlers;
 import com.eagle.dao.UserDao;
 import com.eagle.model.response.ErrorResponse;
 import com.eagle.model.response.UserListResponse;
-import com.eagle.util.HttpIO;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 
 import java.util.List;
 
-public class ListUsersHandler implements HttpHandler {
+/** Example handler using BaseHandler utilities. */
+public class ListUsersHandler extends BaseHandler {
     private final UserDao userDao = new UserDao();
 
     @Override
-    public void handle(HttpExchange ex) {
+    protected void doHandle(HttpExchange ex) throws Exception {
+        if (!ensureMethod(ex, "GET", "OPTIONS")) return; // writes 405 when not allowed
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.getResponseHeaders().set("Allow", "GET, OPTIONS");
+            ex.sendResponseHeaders(204, -1);
+            return;
+        }
+
         try {
-            if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
-                HttpIO.writeJson(ex, 405, new ErrorResponse("method_not_allowed", "Use GET").toJson());
-                return;
-            }
-
             List<String> users = userDao.getAllUsers();
-            UserListResponse resp = new UserListResponse("users list",users);
-            HttpIO.writeJson(ex, 200, resp.toJson());
-
+            UserListResponse resp = new UserListResponse("users list", users);
+            writeJson(ex, 200, resp);
         } catch (Exception e) {
-            try {
-                HttpIO.writeJson(ex, 500, new ErrorResponse("internal_error", e.getMessage()).toJson());
-            } catch (Exception ignore) {
-                try { ex.sendResponseHeaders(500, -1); } catch (Exception ignored) {}
-            }
+            writeJson(ex, 500, new ErrorResponse("internal_error", e.getMessage()));
         }
     }
 }
