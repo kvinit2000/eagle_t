@@ -3,130 +3,75 @@ package com.eagle.client;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
-public class AccountsClient {
+public class AccountsClient extends AbsClient {
     private static final Gson GSON = new Gson();
-    private static final String BASE_URL = "http://localhost:8080";
 
-    // ========= Accounts =========
-
-    /** POST /users/me/accounts — create account. If accountNumber is null/blank, server generates one. */
-    public static String create(String token, String accountNumber) throws Exception {
-        URL url = new URL(BASE_URL + "/users/me/accounts");
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("POST");
-        c.setDoOutput(true);
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        c.setRequestProperty("Accept", "application/json");
-
-        String json = (accountNumber == null || accountNumber.isBlank())
-                ? "{}"
+    // ---- Accounts ----
+    public String create(String baseUrl, String token, String accountNumber) throws Exception {
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts"), "POST");
+        setAuth(c, token); setJsonHeaders(c); enableBody(c);
+        String json = (accountNumber == null || accountNumber.isBlank()) ? "{}"
                 : "{\"accountNumber\":\"" + escape(accountNumber) + "\"}";
-        try (OutputStream os = c.getOutputStream()) {
-            os.write(json.getBytes(StandardCharsets.UTF_8));
-        }
-
+        writeJson(c, json);
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        String loc = safeHeader(c, "Location");
-        return (loc == null || loc.isBlank())
-                ? ("HTTP " + code + " -> " + body)
-                : ("HTTP " + code + " Location: " + loc + " -> " + body);
+        String loc = c.getHeaderField("Location");
+        return (loc==null||loc.isBlank())? ("HTTP "+code+" -> "+body) : ("HTTP "+code+" Location: "+loc+" -> "+body);
     }
 
-    /** GET /users/me/accounts — list my accounts. */
-    public static String list(String token) throws Exception {
-        URL url = new URL(BASE_URL + "/users/me/accounts");
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("GET");
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Accept", "application/json");
-
+    public String list(String baseUrl, String token) throws Exception {
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts"), "GET");
+        setAuth(c, token); c.setRequestProperty("Accept","application/json");
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        return "HTTP " + code + " -> " + body;
+        return "HTTP "+code+" -> "+body;
     }
 
-    /** GET /users/me/accounts/{id} — get account details (ownership enforced). */
-    public static String getOne(String token, int id) throws Exception {
-        URL url = new URL(BASE_URL + "/users/me/accounts/" + id);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("GET");
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Accept", "application/json");
-
+    public String getOne(String baseUrl, String token, int id) throws Exception {
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts/"+id), "GET");
+        setAuth(c, token); c.setRequestProperty("Accept","application/json");
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        return "HTTP " + code + " -> " + body;
+        return "HTTP "+code+" -> "+body;
     }
 
-    /** DELETE /users/me/accounts/{id} — delete account (requires balance == 0). */
-    public static String delete(String token, int id) throws Exception {
-        URL url = new URL(BASE_URL + "/users/me/accounts/" + id);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("DELETE");
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Accept", "application/json");
-
+    public String delete(String baseUrl, String token, int id) throws Exception {
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts/"+id), "DELETE");
+        setAuth(c, token); c.setRequestProperty("Accept","application/json");
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        return "HTTP " + code + (body.isBlank() ? "" : " -> " + body);
+        return "HTTP "+code+(body.isBlank()?"":" -> "+body);
     }
 
-    // ========= Transactions =========
-
-    /** POST /users/me/accounts/{id}/transactions — deposit amount (e.g., "25.00"). */
-    public static String deposit(String token, int accountId, String amount) throws Exception {
-        return tx(token, accountId, "DEPOSIT", amount);
+    // ---- Transactions ----
+    public String deposit(String baseUrl, String token, int accountId, String amount) throws Exception {
+        return tx(baseUrl, token, accountId, "DEPOSIT", amount);
+    }
+    public String withdraw(String baseUrl, String token, int accountId, String amount) throws Exception {
+        return tx(baseUrl, token, accountId, "WITHDRAW", amount);
     }
 
-    /** POST /users/me/accounts/{id}/transactions — withdraw amount (e.g., "10.00"). */
-    public static String withdraw(String token, int accountId, String amount) throws Exception {
-        return tx(token, accountId, "WITHDRAW", amount);
-    }
-
-    /**
-     * GET /users/me/accounts/{id}/transactions — list newest-first with optional pagination.
-     * @param limit 1..200 (server clamps); null leaves default
-     * @param offset >=0; null leaves default
-     */
-    public static String listTransactions(String token, int accountId, Integer limit, Integer offset) throws Exception {
+    public String listTransactions(String baseUrl, String token, int accountId, Integer limit, Integer offset) throws Exception {
         StringBuilder qs = new StringBuilder();
-        if (limit != null) {
-            qs.append(qs.length() == 0 ? "?" : "&").append("limit=").append(Math.max(1, Math.min(200, limit)));
-        }
-        if (offset != null) {
-            qs.append(qs.length() == 0 ? "?" : "&").append("offset=").append(Math.max(0, offset));
-        }
-        URL url = new URL(BASE_URL + "/users/me/accounts/" + accountId + "/transactions" + qs);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("GET");
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Accept", "application/json");
-
+        if (limit != null) qs.append(qs.length()==0?"?":"&").append("limit=").append(Math.max(1, Math.min(200, limit)));
+        if (offset != null) qs.append(qs.length()==0?"?":"&").append("offset=").append(Math.max(0, offset));
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts/"+accountId+"/transactions"+qs), "GET");
+        setAuth(c, token); c.setRequestProperty("Accept","application/json");
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        return "HTTP " + code + " -> " + body;
+        return "HTTP "+code+" -> "+body;
     }
 
-    /** Backward-compatible convenience method that uses server defaults. */
-    public static String listTransactions(String token, int accountId) throws Exception {
-        return listTransactions(token, accountId, null, null);
+    public String listTransactions(String baseUrl, String token, int accountId) throws Exception {
+        return listTransactions(baseUrl, token, accountId, null, null);
     }
 
-    // ========= Helpers =========
-
-    /** Convenience: parse the first account id from list() JSON result to drive demos. */
+    // helper to parse first id from list()
     public static Integer firstIdFromList(String listResponse) {
         try {
             int idx = listResponse.indexOf("->");
@@ -141,45 +86,16 @@ public class AccountsClient {
         return null;
     }
 
-    private static String tx(String token, int accountId, String type, String amount) throws Exception {
-        URL url = new URL(BASE_URL + "/users/me/accounts/" + accountId + "/transactions");
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setRequestMethod("POST");
-        c.setDoOutput(true);
-        c.setRequestProperty("Authorization", "Bearer " + token);
-        c.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        c.setRequestProperty("Accept", "application/json");
+    private static String escape(String s){return s==null?"":s.replace("\\","\\\\").replace("\"","\\\"");}
 
-        String json = "{\"type\":\"" + type + "\",\"amount\":\"" + escape(amount) + "\"}";
-        try (OutputStream os = c.getOutputStream()) {
-            os.write(json.getBytes(StandardCharsets.UTF_8));
-        }
-
+    private String tx(String baseUrl, String token, int accountId, String type, String amount) throws Exception {
+        HttpURLConnection c = open(joinUrl(baseUrl, "/users/me/accounts/"+accountId+"/transactions"), "POST");
+        setAuth(c, token); setJsonHeaders(c); enableBody(c);
+        String json = "{\"type\":\""+type+"\",\"amount\":\""+escape(amount)+"\"}";
+        writeJson(c, json);
         int code = c.getResponseCode();
         String body = readBody(c, code);
-        String loc = safeHeader(c, "Location");
-        return (loc == null || loc.isBlank())
-                ? ("HTTP " + code + " -> " + body)
-                : ("HTTP " + code + " Location: " + loc + " -> " + body);
-    }
-
-    private static String readBody(HttpURLConnection c, int code) throws Exception {
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                (code >= 200 && code < 300) ? c.getInputStream() : c.getErrorStream(),
-                StandardCharsets.UTF_8))) {
-            StringBuilder sb = new StringBuilder();
-            for (String l; (l = br.readLine()) != null; ) sb.append(l);
-            return sb.toString();
-        }
-    }
-
-    private static String safeHeader(HttpURLConnection c, String name) {
-        try { return c.getHeaderField(name); } catch (Exception ignore) { return null; }
-    }
-
-    private static String escape(String s) {
-        if (s == null) return "";
-        // minimal JSON string escape for quotes/backslashes; good enough for these payloads
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        String loc = c.getHeaderField("Location");
+        return (loc==null||loc.isBlank())? ("HTTP "+code+" -> "+body) : ("HTTP "+code+" Location: "+loc+" -> "+body);
     }
 }
