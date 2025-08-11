@@ -16,16 +16,24 @@ import java.util.Map;
 
 public class MeClient {
     private static final Gson GSON = new Gson();
+    private static final String DEFAULT_BASE_URL = "http://localhost:8080";
+    private static final int DEFAULT_TIMEOUT_MS = 5000;
+
+    /** GET /users/me (default base URL) */
+    public static UserProfileResponse getMe(String authToken) throws Exception {
+        return getMe(DEFAULT_BASE_URL, authToken);
+    }
 
     /** GET /users/me */
-    public static UserProfileResponse getMe(String authToken) throws Exception {
+    public static UserProfileResponse getMe(String baseUrl, String authToken) throws Exception {
         requireToken(authToken);
+        String base = trimTrailingSlash(baseUrl);
 
-        URL url = new URL("http://localhost:8080/users/me");
+        URL url = new URL(base + "/users/me");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setUseCaches(false);
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
+        conn.setConnectTimeout(DEFAULT_TIMEOUT_MS);
+        conn.setReadTimeout(DEFAULT_TIMEOUT_MS);
         conn.setRequestMethod("GET");
         conn.setRequestProperty("Authorization", "Bearer " + authToken);
         conn.setRequestProperty("Accept", "application/json");
@@ -50,26 +58,51 @@ public class MeClient {
                                               String address,
                                               String pin,
                                               String phone) throws Exception {
+        return patchMe(DEFAULT_BASE_URL, authToken, email, dob, address, pin, phone);
+    }
+
+    /** PATCH /users/me with explicit base URL. */
+    public static UserProfileResponse patchMe(String baseUrl,
+                                              String authToken,
+                                              String email,
+                                              String dob,
+                                              String address,
+                                              String pin,
+                                              String phone) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<>();
         if (!isBlank(email))   payload.put("email", email.trim());
         if (!isBlank(dob))     payload.put("dob", dob.trim());
         if (!isBlank(address)) payload.put("address", address.trim());
         if (!isBlank(pin))     payload.put("pin", pin.trim());
         if (!isBlank(phone))   payload.put("phone", phone.trim());
-        return patch(authToken, payload);
+        return patch(baseUrl, authToken, payload);
     }
 
-    /** Convenience helpers */
+    /** Convenience helpers (default base URL) */
     public static UserProfileResponse patchEmail(String authToken, String email) throws Exception {
-        return patch(authToken, Map.of("email", email));
+        return patch(DEFAULT_BASE_URL, authToken, Map.of("email", email));
     }
     public static UserProfileResponse patchPhone(String authToken, String phone) throws Exception {
-        return patch(authToken, Map.of("phone", phone));
+        return patch(DEFAULT_BASE_URL, authToken, Map.of("phone", phone));
+    }
+
+    /** Overloads with explicit base URL */
+    public static UserProfileResponse patchEmail(String baseUrl, String authToken, String email) throws Exception {
+        return patch(baseUrl, authToken, Map.of("email", email));
+    }
+    public static UserProfileResponse patchPhone(String baseUrl, String authToken, String phone) throws Exception {
+        return patch(baseUrl, authToken, Map.of("phone", phone));
     }
 
     /** Generic PATCH using a provided map (non-null/non-blank values are sent) */
     public static UserProfileResponse patch(String authToken, Map<String, ?> fields) throws Exception {
+        return patch(DEFAULT_BASE_URL, authToken, fields);
+    }
+
+    /** Generic PATCH with explicit base URL */
+    public static UserProfileResponse patch(String baseUrl, String authToken, Map<String, ?> fields) throws Exception {
         requireToken(authToken);
+        String base = trimTrailingSlash(baseUrl);
 
         // sanitize: drop null/blank strings
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -89,12 +122,12 @@ public class MeClient {
             throw new IllegalArgumentException("No fields to update (payload would be empty).");
         }
 
-        URL url = new URL("http://localhost:8080/users/me");
+        URL url = new URL(base + "/users/me");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setUseCaches(false);
         conn.setDoOutput(true);
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(5000);
+        conn.setConnectTimeout(DEFAULT_TIMEOUT_MS);
+        conn.setReadTimeout(DEFAULT_TIMEOUT_MS);
         setPatch(conn); // use PATCH; fallback to POST + override if needed
         conn.setRequestProperty("Authorization", "Bearer " + authToken);
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
@@ -147,5 +180,12 @@ public class MeClient {
             conn.setRequestMethod("POST");
             conn.setRequestProperty("X-HTTP-Method-Override", "PATCH");
         }
+    }
+
+    private static String trimTrailingSlash(String s) {
+        if (s == null || s.isEmpty()) return "";
+        int end = s.length();
+        while (end > 0 && s.charAt(end - 1) == '/') end--;
+        return s.substring(0, end);
     }
 }

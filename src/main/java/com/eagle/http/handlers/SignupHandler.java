@@ -2,51 +2,43 @@ package com.eagle.http.handlers;
 
 import com.eagle.dao.UserDao;
 import com.eagle.model.request.SignupRequest;
+import com.eagle.model.response.ErrorResponse;
 import com.eagle.model.response.SignupResponse;
-import com.google.gson.Gson;
+import com.eagle.util.HttpIO;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 
 public class SignupHandler implements HttpHandler {
     private static final Logger log = LogManager.getLogger(SignupHandler.class);
-    private static final Gson GSON = new Gson();
     private final UserDao userDao = new UserDao();
 
     @Override
-    public void handle(HttpExchange exchange) {
+    public void handle(HttpExchange ex) {
         try {
-            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+            if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+                safeWriteJson(ex, 405, new ErrorResponse("method_not_allowed", "Use POST"));
                 return;
             }
 
-            // Read full body as String, then use DTO helper to parse
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            // Read and parse request JSON
+            String body = HttpIO.readBody(ex);
             SignupRequest req = SignupRequest.fromJson(body);
 
             if (req == null || isBlank(req.getUsername()) || isBlank(req.getPassword())) {
-                sendJson(exchange, 400, new SignupResponse(
-                        false,
-                        "username and password are required",
-                        null, null, null, null, null, null,
-                        null // authToken
-                ));
+                safeWriteJson(ex, 400, new ErrorResponse("bad_request", "username and password are required"));
                 return;
             }
 
-            // Try parse dob if present (optional)
+            // Optional dob parsing (yyyy-MM-dd)
             LocalDate dob = null;
             if (!isBlank(req.getDob())) {
                 try {
-                    dob = LocalDate.parse(req.getDob()); // expects yyyy-MM-dd
-                } catch (Exception e) {
+                    dob = LocalDate.parse(req.getDob());
+                } catch (Exception pe) {
                     log.warn("Invalid dob format received: {}", req.getDob());
                 }
             }
@@ -61,48 +53,30 @@ public class SignupHandler implements HttpHandler {
                     nullIfBlank(req.getPhone())
             );
 
-            String dobOut = req.getDob();
-
-            if (ok) {
-                // Fetch the bearer token generated during save
-                String authToken = userDao.getAuthToken(req.getUsername());
-
-                // Return token in JSON (OpenAPI Bearer flow)
-                sendJson(exchange, 201, new SignupResponse(
-                        true,
-                        "Signup successful",
-                        req.getUsername(),
-                        nullIfBlank(req.getEmail()),
-                        dobOut,
-                        nullIfBlank(req.getAddress()),
-                        nullIfBlank(req.getPin()),
-                        nullIfBlank(req.getPhone()),
-                        authToken
-                ));
-            } else {
-                sendJson(exchange, 409, new SignupResponse(
-                        false,
-                        "Username already exists or could not be saved",
-                        req.getUsername(),
-                        nullIfBlank(req.getEmail()),
-                        dobOut,
-                        nullIfBlank(req.getAddress()),
-                        nullIfBlank(req.getPin()),
-                        nullIfBlank(req.getPhone()),
-                        null // no token on failure
-                ));
+            if (!ok) {
+                // Likely username conflict or DB failure
+                safeWriteJson(ex, 409, new ErrorResponse("conflict", "Username already exists or could not be saved"));
+                return;
             }
+
+            // Success: fetch bearer token generated on save
+            String authToken = userDao.getAuthToken(req.getUsername());
+            SignupResponse resp = new SignupResponse(
+                    true,
+                    "Signup successful",
+                    req.getUsername(),
+                    nullIfBlank(req.getEmail()),
+                    req.getDob(),
+                    nullIfBlank(req.getAddress()),
+                    nullIfBlank(req.getPin()),
+                    nullIfBlank(req.getPhone()),
+                    authToken
+            );
+            safeWriteJson(ex, 201, resp);
 
         } catch (Exception e) {
             log.error("Signup error", e);
-            try {
-                sendJson(exchange, 500, new SignupResponse(
-                        false,
-                        "Internal error",
-                        null, null, null, null, null, null,
-                        null
-                ));
-            } catch (Exception ignored) {}
+            safeWriteJson(ex, 500, new ErrorResponse("internal_error", e.getMessage()));
         }
     }
 
@@ -114,10 +88,21 @@ public class SignupHandler implements HttpHandler {
         return isBlank(s) ? null : s.trim();
     }
 
-    private void sendJson(HttpExchange ex, int status, Object body) throws Exception {
-        byte[] out = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-        ex.sendResponseHeaders(status, out.length);
-        try (OutputStream os = ex.getResponseBody()) { os.write(out); }
+    /** Never throw from writing the response; fall back to status-only if needed. */
+    private void safeWriteJson(HttpExchange ex, int status, Object payload) {
+        try {
+            if (payload instanceof SignupResponse sr) {
+                HttpIO.writeJson(ex, status, sr.toJson());
+            } else if (payload instanceof ErrorResponse er) {
+                HttpIO.writeJson(ex, status, er.toJson());
+            } else if (payload instanceof String s) {
+                HttpIO.writeJson(ex, status, s);
+            } else {
+                HttpIO.writeJson(ex, status, String.valueOf(payload));
+            }
+        } catch (Exception writeErr) {
+            log.error("Failed to send JSON response", writeErr);
+            try { ex.sendResponseHeaders(status, -1); } catch (Exception ignored) {}
+        }
     }
 }

@@ -4,16 +4,18 @@ import com.eagle.dao.UserDao;
 import com.eagle.dao.UserDao.UserRecord;
 import com.eagle.model.response.UserProfileResponse;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class UsersMeHandler implements HttpHandler {
@@ -25,43 +27,59 @@ public class UsersMeHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) {
         try {
-            String method = exchange.getRequestMethod();
-            String override = exchange.getRequestHeaders().getFirst("X-HTTP-Method-Override");
-            if (override != null && !override.isBlank()) {
-                method = override.trim().toUpperCase();
-            }
+            String method = effectiveMethod(exchange);
 
             switch (method) {
                 case "GET" -> handleGet(exchange);
                 case "PATCH" -> handlePatch(exchange);
-                default -> exchange.sendResponseHeaders(405, -1);
+                case "OPTIONS" -> methodNotAllowed(exchange, "GET, PATCH, OPTIONS");
+                default -> methodNotAllowed(exchange, "GET, PATCH, OPTIONS");
             }
         } catch (Exception e) {
             log.error("UsersMeHandler error", e);
-            try { writeJson(exchange, 500, Map.of("ok", false, "message", "Server error")); }
+            try { sendJson(exchange, 500, Map.of("ok", false, "message", "Server error")); }
             catch (Exception ignore) {}
         }
     }
 
     private void handleGet(HttpExchange exchange) throws Exception {
-        String token = parseBearer(exchange.getRequestHeaders().getFirst("Authorization"));
-        if (token == null) { writeJson(exchange, 401, Map.of("ok", false, "message", "Missing or invalid Authorization header")); return; }
+        String token = getAuthToken(exchange);
+        if (token == null) return;
 
         UserRecord u = userDao.getUserByAuthToken(token);
-        if (u == null) { writeJson(exchange, 401, Map.of("ok", false, "message", "Invalid token")); return; }
+        if (u == null) { sendError(exchange, 401, "Invalid token"); return; }
 
         UserProfileResponse resp = new UserProfileResponse(
-                u.username, u.email, (u.dob == null ? null : u.dob.toString()), u.address, u.pin, u.phone
+                u.username,
+                u.email,
+                (u.dob == null ? null : u.dob.toString()),
+                u.address,
+                u.pin,
+                u.phone
         );
-        writeJson(exchange, 200, resp);
+        sendJson(exchange, 200, resp);
     }
 
     private void handlePatch(HttpExchange exchange) throws Exception {
-        String token = parseBearer(exchange.getRequestHeaders().getFirst("Authorization"));
-        if (token == null) { writeJson(exchange, 401, Map.of("ok", false, "message", "Missing or invalid Authorization header")); return; }
+        if (!isJson(exchange)) {
+            sendError(exchange, 415, "Content-Type must be application/json");
+            return;
+        }
 
-        // Read body as Map to keep it flexible
-        Map<?,?> req = GSON.fromJson(new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8), Map.class);
+        String token = getAuthToken(exchange);
+        if (token == null) return;
+
+        UserRecord authed = userDao.getUserByAuthToken(token);
+        if (authed == null) { sendError(exchange, 401, "Invalid token"); return; }
+
+        Map<?, ?> req;
+        try {
+            req = fromJson(exchange, Map.class);
+        } catch (JsonSyntaxException jse) {
+            sendError(exchange, 400, "Malformed JSON body");
+            return;
+        }
+
         String email   = strOrNull(req, "email");
         String address = strOrNull(req, "address");
         String pin     = strOrNull(req, "pin");
@@ -71,23 +89,40 @@ public class UsersMeHandler implements HttpHandler {
         LocalDate dob = null;
         if (dobRaw != null) {
             try { dob = LocalDate.parse(dobRaw); }
-            catch (Exception e) { writeJson(exchange, 400, Map.of("ok", false, "message", "Invalid dob format (yyyy-MM-dd)")); return; }
+            catch (Exception e) { sendError(exchange, 400, "Invalid dob format (yyyy-MM-dd)"); return; }
         }
 
         if (email == null && address == null && pin == null && phone == null && dob == null) {
-            writeJson(exchange, 400, Map.of("ok", false, "message", "No fields to update"));
+            sendError(exchange, 400, "No fields to update");
             return;
         }
 
         boolean ok = userDao.patchUserByAuthToken(token, email, dob, address, pin, phone);
-        if (!ok) { writeJson(exchange, 404, Map.of("ok", false, "message", "User not found or nothing changed")); return; }
+        if (!ok) {
+            sendError(exchange, 404, "User not found or nothing changed");
+            return;
+        }
 
-        // Return updated profile
         UserRecord u = userDao.getUserByAuthToken(token);
         UserProfileResponse resp = new UserProfileResponse(
                 u.username, u.email, (u.dob == null ? null : u.dob.toString()), u.address, u.pin, u.phone
         );
-        writeJson(exchange, 200, resp);
+        sendJson(exchange, 200, resp);
+    }
+
+    private String getAuthToken(HttpExchange exchange) throws IOException {
+        String token = parseBearer(exchange.getRequestHeaders().getFirst("Authorization"));
+        if (token == null) { sendError(exchange, 401, "Missing or invalid Authorization header"); return null; }
+        return token;
+    }
+
+    private static String effectiveMethod(HttpExchange exchange) {
+        String method = exchange.getRequestMethod();
+        String override = exchange.getRequestHeaders().getFirst("X-HTTP-Method-Override");
+        if (override != null && !override.isBlank()) {
+            method = override.trim().toUpperCase();
+        }
+        return method;
     }
 
     private static String strOrNull(Map<?,?> m, String key) {
@@ -105,10 +140,33 @@ public class UsersMeHandler implements HttpHandler {
         return t.isEmpty() ? null : t;
     }
 
-    private void writeJson(HttpExchange ex, int status, Object body) throws Exception {
+    private static boolean isJson(HttpExchange ex) {
+        final String ct = ex.getRequestHeaders().getFirst("Content-Type");
+        if (ct == null) return false;
+        final String mime = ct.split(";", 2)[0].trim();
+        return "application/json".equalsIgnoreCase(mime);
+    }
+
+    private static <T> T fromJson(HttpExchange exchange, Class<T> clazz) throws IOException {
+        try (InputStreamReader reader = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+            return GSON.fromJson(reader, clazz);
+        }
+    }
+
+    private static void sendJson(HttpExchange ex, int status, Object body) throws IOException {
         byte[] out = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        Headers h = ex.getResponseHeaders();
+        h.set("Content-Type", "application/json; charset=UTF-8");
         ex.sendResponseHeaders(status, out.length);
         try (OutputStream os = ex.getResponseBody()) { os.write(out); }
+    }
+
+    private static void sendError(HttpExchange ex, int status, String message) throws IOException {
+        sendJson(ex, status, Map.of("ok", false, "message", message));
+    }
+
+    private static void methodNotAllowed(HttpExchange ex, String allowHeader) throws IOException {
+        ex.getResponseHeaders().set("Allow", allowHeader);
+        ex.sendResponseHeaders(405, -1);
     }
 }
