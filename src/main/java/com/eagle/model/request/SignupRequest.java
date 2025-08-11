@@ -1,18 +1,43 @@
 package com.eagle.model.request;
 
+import com.google.gson.Gson;
+
 public class SignupRequest {
-    private String username;  // required
-    private String password;  // required
+    private String username;
+    private String password;
+    private String email;
+    private String dob;
+    private String address;
+    private String pin;
+    private String phone;
 
-    // Optional extended fields
-    private String email;     // optional
-    private String dob;       // optional, ISO-8601 (yyyy-MM-dd)
-    private String address;   // optional
-    private String pin;       // optional
-    private String phone;     // optional
+    private static final Gson GSON = new Gson();
 
-    public SignupRequest() {}
+    public SignupRequest() {
+        // No-arg constructor required for Gson
+    }
 
+    public SignupRequest(String username, String password, String email,
+                         String dob, String address, String pin, String phone) {
+        this.username = username;
+        this.password = password;
+        this.email = email;
+        this.dob = dob;
+        this.address = address;
+        this.pin = pin;
+        this.phone = phone;
+    }
+
+    // ---- JSON helpers ----
+    public String toJson() {
+        return GSON.toJson(this);
+    }
+
+    public static SignupRequest fromJson(String json) {
+        return GSON.fromJson(json, SignupRequest.class);
+    }
+
+    // ---- Getters & setters ----
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
 

@@ -1,11 +1,18 @@
 package com.eagle.client;
 
+import com.eagle.model.request.SignupRequest;
 import com.google.gson.Gson;
-import java.io.*;
-import java.net.*;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Random;
 
 public class SignupClient {
 
@@ -39,7 +46,9 @@ public class SignupClient {
     public static String signupAndStore(String username, String password,
                                         String email, String dob, String address,
                                         String pin, String phone) throws Exception {
-        String respJson = signup(username, password, email, dob, address, pin, phone);
+        // Build DTO
+        SignupRequest req = new SignupRequest(username, password, email, dob, address, pin, phone);
+        String respJson = signup(req);
 
         try {
             @SuppressWarnings("unchecked")
@@ -81,26 +90,24 @@ public class SignupClient {
         return signupAndStore(username, password, null, null, null, null, null);
     }
 
-    /** Raw HTTP call to /signup with all fields */
+    /** Raw HTTP call to /signup with all fields (kept for callers) */
     public static String signup(String username, String password,
                                 String email, String dob, String address,
                                 String pin, String phone) throws Exception {
+        return signup(new SignupRequest(username, password, email, dob, address, pin, phone));
+    }
+
+    /** NEW: Raw HTTP call that accepts a typed DTO and uses its JSON helper */
+    public static String signup(SignupRequest req) throws Exception {
         URL url = new URL("http://localhost:8080/signup");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
         conn.setDoOutput(true);
         conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+        conn.setRequestProperty("Accept", "application/json");
 
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("username", username);
-        body.put("password", password);
-        if (email != null) body.put("email", email);
-        if (dob != null) body.put("dob", dob);
-        if (address != null) body.put("address", address);
-        if (pin != null) body.put("pin", pin);
-        if (phone != null) body.put("phone", phone);
-
-        String jsonBody = GSON.toJson(body);
+        // Use the same helper on the DTO
+        String jsonBody = req.toJson();
         try (OutputStream os = conn.getOutputStream()) {
             os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
         }

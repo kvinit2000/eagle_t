@@ -27,10 +27,9 @@ public class SignupHandler implements HttpHandler {
                 return;
             }
 
-            SignupRequest req = GSON.fromJson(
-                    new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8),
-                    SignupRequest.class
-            );
+            // Read full body as String, then use DTO helper to parse
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            SignupRequest req = SignupRequest.fromJson(body);
 
             if (req == null || isBlank(req.getUsername()) || isBlank(req.getPassword())) {
                 sendJson(exchange, 400, new SignupResponse(
